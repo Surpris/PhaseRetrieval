@@ -28,6 +28,15 @@ Currently, installing this module requires the following steps:
 1. Unzip the file to to any directory.
 1. Run `python setup.py install` at the directory.
 
+If the above procedure does not work, please try the following:
+
+1. Download this module as a zip (or tar.gz) file.
+1. Unzip the file to to any directory.
+1. Run `python setup.py sdist` at the directory.
+    + A package file `prpy-x.x.x.tar.gz` are created in `dist` directory.
+1. Move to `dist` directory.
+1. Run `pip install ./prpy-x.x.x.tar.gz` at the directory.
+
 # Hierarchical structure of prpy module
 ```
 /prpy
@@ -43,8 +52,8 @@ Currently, installing this module requires the following steps:
 # Projection functions
 In real space, following functions are available:
 
-* `projection\_er`  : error reduction algorithm
-* `projection\_hio` : hybrid input-output algorithm
-* `projection\_hpr` : hybrid projection-reflection algorithm
+* `projection_er`  : error reduction algorithm
+* `projection_hio` : hybrid input-output algorithm
+* `projection_hpr` : hybrid projection-reflection algorithm
 
-In frequency space, `projection\_modulus` applies constraints to a Fourier modulus.
+In frequency space, `projection_modulus` applies constraints to a Fourier modulus.
