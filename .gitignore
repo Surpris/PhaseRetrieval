@@ -140,3 +140,4 @@ venv.bak/
 # Data, Images
 data/
 images/
+dll/
