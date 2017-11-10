@@ -33,7 +33,7 @@ If the above procedure does not work, please try the following:
 1. Download this module as a zip (or tar.gz) file.
 1. Unzip the file to to any directory.
 1. Run `python setup.py sdist` at the directory.
-    + A package file `prpy-x.x.x.tar.gz` are created in `dist` directory.
+    + A package file `prpy-x.x.x.tar.gz` is created in `dist` directory.
 1. Move to `dist` directory.
 1. Run `pip install ./prpy-x.x.x.tar.gz` at the directory.
 
