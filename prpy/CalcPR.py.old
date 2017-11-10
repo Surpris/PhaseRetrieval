@@ -1,0 +1,402 @@
+# -*- coding: utf-8 -*-
+import os
+import datetime
+import numpy as np
+from numpy.fft import *
+from matplotlib import pyplot as plt
+from cv2 import GaussianBlur as cvGB
+import pickle
+import multiprocessing
+import importlib
+import sys
+sys.path.append('..')
+import general.folderfunctions as ff
+from general.Space import Space
+
+spam_spec = importlib.util.find_spec("pyfftw")
+found = spam_spec is not None
+if found is True:
+    import pyfftw
+
+spam_spec = importlib.util.find_spec("pycuda")
+found_pycuda = spam_spec is not None
+spam_spec = importlib.util.find_spec("skcuda")
+found_skcuda = spam_spec is not None
+if found_pycuda is True and found_skcuda is True:
+    found_cufft = True
+    import pycuda.gpuarray as gpuarray
+    import skcuda.fft as cu_fft
+    import pycuda.autoinit
+else:
+    found_cufft = False
+
+def funcfftw(F):
+    if found is True:
+        pyfftw.forget_wisdom()
+        func = pyfftw.builders.fft2(F, overwrite_input=True, planner_effort='FFTW_ESTIMATE', threads=multiprocessing.cpu_count())
+        return func()
+    else:
+        return fft2(F)
+def ifuncfftw(F):
+    if found is True:
+        pyfftw.forget_wisdom()
+        ifunc = pyfftw.builders.ifft2(F, overwrite_input=True, planner_effort='FFTW_ESTIMATE', threads=multiprocessing.cpu_count())
+        return ifunc()
+    else:
+        return ifft2(F)
+
+class CalcPR(Space):
+    """
+    位相回復法（Phase Retrieval, PR）のクラス。
+    現在実装しているのは
+        * Error Reduction (ER): CalcPR_ER関数
+        * Fineup's Hybrid Input-Output algorithm (HIO): CalcPR_HIO関数
+        * HIO-ER repetition: CalcPR_HIOER関数
+
+    __init__中の引数について、
+        N_iter: 反復回数
+        sprange: １次元の空間レンジ（1*N array）
+        C_s: 実空間のサポート領域（N*N array）
+        D_s: 周波数空間のサポート領域(N*N array)
+        _beta: HIO用の係数
+        N_iter_hio: HIOの反復回数
+        N_iter_er: ERの反復回数
+    HIO、ERの反復回数について、入力がなければN_iterに一致する。
+    各メソッドの簡単な説明は、各メソッドの定義の冒頭に記載。
+    """
+
+    def __init__(self, N, xmax, N_iter, C_s=None, D_s=None, _beta=0.85, N_iter_hio=None, N_iter_er=None, fft_type="numpy", *args, **kwargs):
+        """
+        クラスの初期化。
+        """
+        Space.__init__(self, N, xmax, **kwargs)
+        self.__sprange = self.RangeSpace()[0]
+        self.__q = self.RangeAngleFreq()[0]
+        self.__N = len(self.__sprange)
+
+        self.__x0 = 3.8315
+        self.__N_iter = N_iter
+
+        self.__beta = _beta
+        self.__N_iter_hio = N_iter if N_iter_hio is None else N_iter_hio
+        self.__N_iter_er = N_iter if N_iter_er is None else N_iter_er
+
+        self.__r_factor = []
+        self.__C_s = C_s
+        self.__D_s = D_s
+        self.__InitRho()
+        self.__cvcoef = 2.884402748387961466
+
+        if fft_type not in ['numpy', 'fftw', 'cufft']:
+            raise ValueError('Invalid value for the keyword "fft_type."')
+
+        self.fft_type = fft_type
+        if self.fft_type == 'cufft':
+            buff = self.__C_s.shape
+            self.__x_gpu = gpuarray.empty(buff, np.complex64)
+            self.__xf_gpu = gpuarray.empty(buff, np.complex64)
+            self.__plan = cu_fft.Plan(buff, np.complex64, np.complex64)
+
+        self.__InitFileInfo()
+
+    def __InitFileInfo(self, savefldr=None, count=None):
+        self.__d = datetime.datetime.today()
+        if savefldr is None or type(savefldr) is not str:
+            self.__savefldrpath = 'G:/UserData/Python_output/out_{0:%Y%m%d}/'.format(self.__d)
+        else:
+            self.__savefldrpath = savefldr
+        ff.makefolders(self.__savefldrpath)
+        self.__filename = 'calcpr.calcpr'
+        self.__filepath = self.__savefldrpath + self.__filename
+        if count is None or type(count) is not int:
+            self.__savecount = 0
+        else:
+            self.__savecount = count
+
+    def __InitRho(self):
+        """
+        密度分布の初期化。
+        """
+        self.__rho_0 = np.exp(2*np.pi*1j*np.random.rand(self.__N, self.__N))
+        self.__rho_i = None
+        self.__rho_f = None
+
+    def __fft2(self, F):
+        if self.fft_type not in ['numpy', 'fftw', 'cufft']:
+            raise ValueError('Invalid parameter for the keyword "fft_type."')
+        if found is True and self.fft_type == 'fftw':
+            pyfftw.forget_wisdom()
+            func = pyfftw.builders.fft2(F, overwrite_input=True, planner_effort='FFTW_ESTIMATE', threads=multiprocessing.cpu_count())
+            return func()
+        elif found_cufft is True and self.fft_type == 'cufft':
+            self.__x_gpu.set(F.astype(np.complex64))
+            # xf_gpu = gpuarray.empty(F.shape, np.complex64)
+            cu_fft.fft(self.__x_gpu, self.__xf_gpu, self.__plan)
+            return self.__xf_gpu.get()
+        else:
+            return fft2(F)
+
+    def __ifft2(self, F):
+        if self.fft_type not in ['numpy', 'fftw', 'cufft']:
+            raise ValueError('Invalid parameter for the keyword "fft_type."')
+        if found is True and self.fft_type == 'fftw':
+            pyfftw.forget_wisdom()
+            ifunc = pyfftw.builders.ifft2(F, overwrite_input=True, planner_effort='FFTW_ESTIMATE', threads=multiprocessing.cpu_count())
+            return ifunc()
+        elif found_cufft is True and self.fft_type == 'cufft':
+            self.__x_gpu.set(F.astype(np.complex64))
+            # xf_gpu = gpuarray.empty(F.shape, np.complex64)
+            cu_fft.ifft(self.__x_gpu, self.__xf_gpu, self.__plan, True)
+            return self.__xf_gpu.get()
+        else:
+            return ifft2(F)
+
+    def save(self, filepath=None, nameonly=False, overwrite=False):
+        self.__kwargs = dict(N_iter=self.__N_iter, N_iter_er=self.__N_iter_er, N_iter_hio=self.__N_iter_hio,
+                             beta=self.__beta, sprange=self.__sprange, rho_0=self.__rho_0, rho_i=self.__rho_i, rho_f=self.__rho_f,
+                             C_s=self.__C_s, D_s=self.__D_s, r_factor=self.__r_factor)
+        if filepath is None:
+            _filepath = self.__filepath
+        elif nameonly is False:
+            ind = filepath.index('/')
+            _fldrpath = filepath[:ind + 1]
+            ff.makefolders(_fldrpath)
+            _filepath = filepath
+        else:
+            _filepath = self.__savefldrpath + filepath
+
+        buff_filepath = _filepath + ""
+        while(os.path.exists(buff_filepath)):
+            _ext = _filepath.split('.')[-1]
+            self.__savecount += 1
+            buff_filepath = _filepath.replace('.'+_ext, '_save_{0:04d}.{1}'.format(self.__savecount, _ext))
+        _filepath = buff_filepath
+        print('Save to the new path: {0}'.format(_filepath))
+
+        self.__kwargs['savecount'] = self.__savecount
+        self.__kwargs['filepath'] = _filepath
+        with open(_filepath, "wb") as f:
+            pickle.dump(self.__kwargs, f)
+
+    def __CalcRFactor(self, F_cal, F_obs):
+        """
+        R因子の計算。計算に用いる式は
+            R = sum(||F_cal|-|F_obs||)/sum(|F_obs|)
+        """
+        self.__r_factor.append(np.sum(np.abs(np.abs(F_cal)-np.abs(F_obs)))/np.sum(np.abs(F_obs)))
+
+    def __projection_er(self, rho):
+        """
+        電子密度分布に対する制約。ERの場合に利用
+        real positivity: 実関数かつ非負である
+        complex positivity: 複素関数かつ実部と虚部が非負である
+        complex: 制約なし
+        """
+        if self.__proj_type==1: # real positivity
+            return np.real(rho)*(np.real(rho) >= 0)
+        elif self.__proj_type==2: # complex positivity
+            return np.real(rho)*(np.real(rho) >= 0)+1j*np.imag(rho)*(np.imag(rho) >= 0)
+        elif self.__proj_type==3: # absolute
+            return np.abs(rho)
+        else: # complex
+            return rho
+
+    def __projection_hio(self, rho, rho_1):
+        """
+        電子密度分布に対する制約。HIOの場合に利用
+        real positivity: 実関数かつ非負である
+        complex positivity: 複素関数かつ実部と虚部が非負である
+        complex: 制約なし
+        """
+        if self.__proj_type==1: # real positivity
+            C_s_0 = (np.real(rho) >= 0)*self.__C_s
+            return rho*C_s_0 + (rho_1 - self.__beta*rho)*(1-C_s_0)
+        elif self.__proj_type==2: # complex positivity
+            C_s_0 = (np.real(rho) >= 0)*self.__C_s
+            rho_r = np.real(rho)*C_s_0 + (np.real(rho_1) - self.__beta*np.real(rho))*(1-C_s_0)
+            C_s_0 = (np.imag(rho) >= 0)*self.__C_s
+            rho_i = np.imag(rho)*C_s_0 + (np.imag(rho_1) - self.__beta*np.imag(rho))*(1-C_s_0)
+            return rho_r+1j*rho_i
+        else: # complex
+            return rho*self.__C_s + (rho_1 - self.__beta*rho)*(1-self.__C_s)
+
+    def __projection_I(self, G, rho_f=None):
+        """
+        周波数空間での制約。
+        領域D_sがない場合は問答無用でそのまま返す。
+        free parameter: D_s外は自由に発展
+        modified support: D_s外は強度で規格化。Y. Nishinoにより提案される
+        """
+        if self.__D_s is None:
+            return np.exp(1j*np.angle(G))*np.abs(self.__F)
+        if self.__proj_type_I==0: # free parameter support for missing data
+            return G*(1-self.__D_s) + np.exp(1j*np.angle(G))*np.abs(self.__F)*self.__D_s
+        elif self.__proj_type_I==1: # modified support proposed by Y. Nishino
+            return G
+
+    def __UpdMask(self, rho_f, filter_type="Gaussian", width=3.):
+        rho_auto = np.abs(self.__ifft2(rho_f))
+        if filter_type == "Gaussian":
+            neiboughers = 2*(int(self.__cvcoef*width-0.5) // 2) + 1
+            rho_auto = cvGB(rho_auto, (neiboughers, neiboughers), width)
+        self.__C_s = rho_auto >= self.__ratio*np.max(rho_auto)
+        plt.figure()
+        plt.imshow(self.__C_s)
+
+    def CalcPR_ER(self, F, change_rho0=True, _proj_type=0, _proj_type_I=0, updmask=0, ratio=0.04, *args, **kwargs):
+        """
+        空間サポートのみ拘束条件とした位相回復アルゴリズム。
+        Error reduction algorithmで計算。
+        """
+
+        if change_rho0 is True:
+            self.__InitRho()
+            self.__r_factor = []
+        self.__F = fftshift(F)
+        rho_i = 1.*self.__rho_0
+        self.__proj_type = _proj_type
+        self.__proj_type_I = _proj_type_I
+        self.__updmask = self.__N_iter_er if updmask <= 0 else updmask
+        self.__ratio = 0.04 if ratio <= 0 else ratio
+
+        # メインループ
+        width = 3.0
+        for ii in range(self.__N_iter_er-1):
+            rho_f = self.__fft2(rho_i)
+            self.__CalcRFactor(rho_f, self.__F)
+            rho_f = self.__projection_I(rho_f)
+            if np.mod(ii+1, self.__updmask) == 0:
+                width = width-0.03 if width >= 1.5 else 1.5
+                self.__UpdMask(rho_f, width=width)
+                self.__UpdMask(rho_f)
+            rho_i = self.__projection_er(self.__ifft2(rho_f)*self.__C_s)
+
+
+
+        # 最後の１ループは拘束条件を外して出力するため別枠処理
+        rho_f = self.__fft2(rho_i)
+        self.__CalcRFactor(rho_f, self.__F)
+        self.__rho_f = self.__projection_I(rho_f)
+        self.__rho_i = self.__projection_er(self.__ifft2(self.__rho_f))
+        self.__rho_f = fftshift(self.__rho_f)
+        self.__method = "ER"
+
+    def CalcPR_HIO(self, F, _beta=None, change_rho0=True, _proj_type=0, _proj_type_I=0, updmask=0, ratio=0.04, *args, **kwargs):
+        """
+        空間サポートのみ拘束条件とした位相回復アルゴリズム。
+        ここではHybrid input-output algorithmを用いる。
+        """
+        if change_rho0 is True:
+            self.__InitRho()
+            self.__r_factor = []
+        self.__F = fftshift(F)
+        self.__beta = _beta if _beta is not None else self.__beta
+        rho_i = 1.*self.__rho_0
+        self.__proj_type = _proj_type
+        self.__proj_type_I = _proj_type_I
+        self.__updmask = self.__N_iter_er if updmask <= 0 else updmask
+        self.__ratio = 0.04 if ratio <= 0 else ratio
+
+        # メインループ
+        width = 3.0
+        for ii in range(self.__N_iter_hio):
+            rho_f = self.__fft2(rho_i)
+            self.__CalcRFactor(rho_f, self.__F)
+            #rho_f = np.exp(1j*np.angle(rho_f))*np.abs(self.__F)
+            rho_f = self.__projection_I(rho_f)
+            if np.mod(ii+1, self.__updmask) == 0:
+                width = width-0.03 if width >= 1.5 else 1.5
+                self.__UpdMask(rho_f, width=width)
+            rho_i = self.__projection_hio(self.__ifft2(rho_f), rho_i)
+
+
+        self.__rho_f = fftshift(rho_f)
+        self.__rho_i = rho_i
+        self.__method = "HIO"
+
+    def CalcPR_HIOER(self, F, _beta=None, change_rho0=True, _proj_type=0, _proj_type_I=0, *args, **kwargs):
+        """
+        空間サポートのみ拘束条件とした位相回復アルゴリズム。
+        ここではHIOとERの複合型アルゴリズムを用いる。
+        具体的にはHIOをN_iter_hio回、ERをN_iter_er回のセットをN_iter回反復する。
+        """
+        if change_rho0 is True:
+            self.__InitRho()
+            self.__r_factor = []
+        self.__beta = _beta if _beta is not None else self.__beta
+        self.__proj_type = _proj_type
+        self.__proj_type_I = _proj_type_I
+
+        # 初期乱数データの一時的保存
+        buff = self.__rho_0
+
+        # メインループ
+        for ii in range(self.__N_iter-1):
+            self.CalcPR_HIO(F, False, self.__proj_type, self.__proj_type_I)
+            # self.__rho_0 = self.__rho_i
+            self.__rho_0 = self.__projection_er(self.__rho_i)
+            self.CalcPR_ER(F, False, self.__proj_type, self.__proj_type_I)
+            self.__rho_0 = self.__rho_i*self.__C_s
+
+        # 最後の１ループは拘束条件を外して出力するため別枠処理
+        self.CalcPR_HIO(F, False, self.__proj_type, self.__proj_type_I)
+        # self.__rho_0 = self.__rho_i
+        self.__rho_0 = self.__projection_er(self.__rho_i)
+        self.CalcPR_ER(F, False, self.__proj_type, self.__proj_type_I)
+
+        # 初期乱数データの回復
+        self.__rho_0 = buff
+        self.__method = "HIOER"
+
+
+    def rho_i(self):
+        return self.__rho_i+0.0
+
+    def rho_f(self):
+        return self.__rho_f+0.0
+
+    def r_factor(self):
+        return np.array(self.__r_factor)
+
+    def GetResults(self):
+        """
+        結果の出力関数。
+        """
+        return self.rho_i(), self.rho_f(), self.r_factor()
+
+    def PlotInit(self, R=10.0, scale=True):
+        plt.figure(figsize=(12, 5), dpi=100)
+        plt.subplot(121)
+        plt.imshow(np.abs(self.__rho_0), extent=[self.__sprange.min(), self.__sprange.max(), self.__sprange.min(), self.__sprange.max()])
+        if scale is True:
+            plt.xlim(-R*1.5, R*1.5)
+            plt.ylim(-R*1.5, R*1.5)
+        plt.subplot(122)
+        plt.imshow(np.abs(fftshift(self.__fft2(self.__rho_0))), extent=[self.__q.min(), self.__q.max(), self.__q.min(), self.__q.max()])
+        if scale is True:
+            plt.xlim(-3*self.__x0/R, 3*self.__x0/R)
+            plt.ylim(-3*self.__x0/R, 3*self.__x0/R)
+
+    def PlotPR(self, R=10.0, scale=True, mask=True):
+        plt.figure(figsize=(12, 5), dpi=100)
+        plt.subplot(121)
+        rho_i = self.__rho_i*self.__C_s if mask is True else self.__rho_i
+        plt.imshow(np.abs(rho_i), extent=[self.__sprange.min(), self.__sprange.max(), self.__sprange.min(), self.__sprange.max()])
+        if scale is True:
+            plt.xlim(-R*1.5, R*1.5)
+            plt.ylim(-R*1.5, R*1.5)
+        plt.subplot(122)
+        plt.imshow(np.abs(self.__rho_f), extent=[self.__q.min(), self.__q.max(), self.__q.min(), self.__q.max()])
+        if scale is True:
+            plt.xlim(-3*self.__x0/R, 3*self.__x0/R)
+            plt.ylim(-3*self.__x0/R, 3*self.__x0/R)
+
+    def PlotPRR(self, R=10.0, scale=True, mask=True):
+        self.PlotPR(R, scale, mask)
+
+        plt.figure(figsize=(12, 5), dpi=100)
+        plt.subplot(121)
+        plt.semilogy(self.__r_factor)
+        plt.xlabel("Iteration")
+        plt.ylabel("R-factor")
+        plt.title("Development of R-factor")
