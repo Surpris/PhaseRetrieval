@@ -13,33 +13,51 @@ from .proj_modulus import F_CONSTS
 PR_MODES = ["ER", "HIO", "HPR", "OSS", "Liu"]
 
 class Plan:
-    """ Plan class of phase retrieval (PR) algorithm.
-    < Input parameters >
-        shape       : shape of input Fourier modulus (2-value tuple)
-        pr_mode     : mode of PR (string in .PR_MODES)
-        N           : # of iterations (unsigned integer)
-        fft_type    : FFT type (string in .fft_funcs.FFT_TYPES)
-        rho_const   : Constraint type in real space (string in .proj_density.RHO_CONSTS)
-        f_const     : Constraint type in frequency space (string in .proj_modulus.F_CONSTS)
-        rho_filter  : Filter type to density (string in .filters.FILTER_TYPES)
-        f_filter    : Filter type to modulus (string in .filters.FILTER_TYPES)
-
-    Other following parameters can be given in kwargs.
-    # HIO/HPR
-        beta        : Coefficient of HIO/HPR (float/double)
-
-    # Wrap-shrink algorithm (S. Marchesini et al., Phys. Rev. B 68, 140101 (2003))
-        updmask_use   : Use/unuse of wrap-shrink algorithm (boolean)
-        updmask_N     : Uprate frequency (uunsigned integer)
-        updmask_ratio : Threshold in generation of mask (float/double in (0, 1))
-        sigma_start   : Initial sigma of Gaussian filter (float/double)
-        sigma_end     : Terminal sigma of Gaussian filter (float/double)
-        sigma_rate    : decrease rate of sigma of Gaussian filter (float/double in (0, 1))
-    """
+    """Plan class of phase retrieval (PR) algorithm"""
 
     def __init__(self, shape, pr_mode, N, fft_type='numpy', rho_const='real', f_const='normal',
                       rho_filter="gaussian", f_filter='gaussian', *args, **kwargs):
-        """ initialization of Plan """
+        """__init__(self, shape, pr_mode, N, fft_type='numpy', rho_const='real', f_const='normal',
+                      rho_filter="gaussian", f_filter='gaussian', *args, **kwargs) -> None
+        initialize this class
+        
+        Parameters
+        ----------
+        shape      : 2-value tuple
+            shape of input Fourier modulus
+        pr_mode    : str
+            mode of PR (in .PR_MODES)
+        N          : positive int
+            # of iterations
+        fft_type   : str
+            FFT type (in .fft_funcs.FFT_TYPES)
+        rho_const  : str
+            Constraint type in real space (in .proj_density.RHO_CONSTS)
+        f_const    : str
+            Constraint type in reciprocal space (in .proj_modulus.F_CONSTS)
+        rho_filter : str
+            Filter type to density (in .filters.FILTER_TYPES)
+        f_filter   : str
+            Filter type to modulus (in .filters.FILTER_TYPES)
+        args       : options
+        kwargs     : options
+            # HIO/HPR
+            beta          : float
+                Coefficient of HIO/HPR
+            # Wrap-shrink algorithm (S. Marchesini et al., Phys. Rev. B 68, 140101 (2003))
+            updmask_use   : bool
+                Use/unuse of wrap-shrink algorithm
+            updmask_N     : positive int
+                Uprate frequency
+            updmask_ratio : float in (0, 1)
+                Threshold in generation of mask
+            sigma_start   : float
+                Initial sigma of Gaussian filter
+            sigma_end     : float
+                Terminal sigma of Gaussian filter
+            sigma_rate    : float in (0, 1)
+                Decrease rate of sigma of Gaussian filter
+        """
 
         if np.isscalar(shape):
             self.shape = (shape, )
@@ -92,19 +110,33 @@ class Plan:
         # self.set()
 
     def get(self):
-        """ return rho and R factor """
-        return 1.*self.rho_i, self.r_factor
+        """get(self) -> numpy.2darray, list
+        return rho and R factor
+        """
+        return self.rho_i.copy() self.r_factor
 
     def set(self, rho_i=None, r_factor=None, C_s=None):
-        """ set rho, R factor, and spatial constraint """
+        """set(self, rho_i=None, r_factor=None, C_s=None) -> None
+        set rho, R factor, and spatial constraint
+
+        Parameters
+        ----------
+        rho_i    : numpy.2darray
+        f_factor : list
+        C_s      : numpy.2darray
+        """
         self.rho_i= 1.*rho_i if rho_i is not None else rho_i
         self.r_factor = r_factor
         self.C_s = 1.*C_s
 
     def save(self, filename):
-        """
-        save properties.
-        filename: file path to save properties to
+        """save(self, filename) -> None
+        save properties
+
+        Parameters
+        ----------
+        filename : str
+            file path to save properties to
         """
         _out = dict(shape=self.shape, pr_mode=self.pr_mode,
                     N_iter=self.N, fft_type=self.fft_type,
@@ -116,7 +148,9 @@ class Plan:
             pickle.dump(_out, f)
 
     def output(self):
-        """ output properties """
+        """output(self) -> dict
+        output properties
+        """
         return dict(shape=self.shape, pr_mode=self.pr_mode,
                     N_iter=self.N, fft_type=self.fft_type,
                     rho_const=self.rho_const, f_const=self.f_const,

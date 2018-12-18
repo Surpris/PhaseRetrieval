@@ -28,9 +28,26 @@ from .proj_density import projection_hpr as _projection_hpr
 from .proj_modulus import projection_modulus as _projection_I
 
 def _calcpr_er(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwargs):
-    """
+    """_calcpr_er(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwargs) -> None
     Error reduction algorithm
     Detail: J. R. Fienup, Appl. Opt. 21, 2758 (1982)
+
+    Parameters
+    ----------
+    F        : numpy.2darray
+        target modulus
+    C_s      : numpy.2darray
+        support in real space
+    plan     : Plan / list of Plans object (Plan)
+        plan of PR
+    D_s      : numpy.2darray (default : None)
+        mask in reciprocal space
+    rho_0    : numpy.2darray (default : None)
+        initial guess of the density map
+    r_factor : list (default : None)
+        history of R factor
+    args     : options
+    kwargs   : options
     """
 
     # Initialize
@@ -89,9 +106,26 @@ def _calcpr_er(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwarg
 
 
 def _calcpr_hio(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwargs):
-    """
+    """_calcpr_hio(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwargs) -> None
     Hybrid input-output algorithm
     Detail: J. R. Fienup, Appl. Opt. 21, 2758 (1982)
+
+    Parameters
+    ----------
+    F        : numpy.2darray
+        target modulus
+    C_s      : numpy.2darray
+        support in real space
+    plan     : Plan / list of Plans object (Plan)
+        plan of PR
+    D_s      : numpy.2darray (default : None)
+        mask in reciprocal space
+    rho_0    : numpy.2darray (default : None)
+        initial guess of the density map
+    r_factor : list (default : None)
+        history of R factor
+    args     : options
+    kwargs   : options
     """
 
     # Initialize
@@ -152,9 +186,26 @@ def _calcpr_hio(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwar
     plan.set(rho_i, r_factor, C_s)
 
 def _calcpr_hpr(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwargs):
-    """
+    """_calcpr_hpr(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwargs) -> None
     Hybrid projection-reflection algorithm
     Detail: H. H. Bauschke, P. L. Combettes and D. R. Luke, J. Opt. Soc. Am. A 20, 1025 (2003)
+
+    Parameters
+    ----------
+    F        : numpy.2darray
+        target modulus
+    C_s      : numpy.2darray
+        support in real space
+    plan     : Plan / list of Plans object (Plan)
+        plan of PR
+    D_s      : numpy.2darray (default : None)
+        mask in reciprocal space
+    rho_0    : numpy.2darray (default : None)
+        initial guess of the density map
+    r_factor : list (default : None)
+        history of R factor
+    args     : options
+    kwargs   : options
     """
     # Initialize
     if rho_0 is None:
@@ -214,9 +265,26 @@ def _calcpr_hpr(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwar
     plan.set(rho_i, r_factor, C_s)
 
 def _calcpr_oss(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwargs):
-    """
+    """_calcpr_oss(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwargs) -> None
     OverSampling smoothness algorithm
     Detail: J. A. Rodriguez et al., J. Appl. Cryst. 46, 12 (2013)
+
+    Parameters
+    ----------
+    F        : numpy.2darray
+        target modulus
+    C_s      : numpy.2darray
+        support in real space
+    plan     : Plan / list of Plans object (Plan)
+        plan of PR
+    D_s      : numpy.2darray (default : None)
+        mask in reciprocal space
+    rho_0    : numpy.2darray (default : None)
+        initial guess of the density map
+    r_factor : list (default : None)
+        history of R factor
+    args     : options
+    kwargs   : options
     """
     # Initialize
     if rho_0 is None:
@@ -298,16 +366,24 @@ def _calc(F, C_s, plans, D_s=None, rho_0=None, r_factor=None, **kwargs):
     pass
 
 def calc(F, C_s, plans, D_s=None, rho_0=None, r_factor=None, **kwargs):
-    """
+    """calc(F, C_s, plans, D_s=None, rho_0=None, r_factor=None, **kwargs) -> None
     Main function to calculate phase retrieval
-    < Input parameters >
-        F            : Fourier modulus (numpy.2darray)
-        C_s          : (Initial) support in real space (numpy.2darray)
-        plans        : Plan / list of Plans object (Plan)
-        D_s          : (Initial) support in frequency space (numpy.2darray)
-
-    < Output >
-        None (results are saved in plans.)
+    
+    Parameters
+    ----------
+    F        : numpy.2darray
+        target modulus
+    C_s      : numpy.2darray
+        support in real space
+    plan     : Plan / list of Plans object (Plan)
+        plan of PR
+    D_s      : numpy.2darray (default : None)
+        mask in reciprocal space
+    rho_0    : numpy.2darray (default : None)
+        initial guess of the density map
+    r_factor : list (default : None)
+        history of R factor
+    kwargs   : options
     """
 
     """--- Check the validity ---"""

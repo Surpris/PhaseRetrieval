@@ -9,17 +9,25 @@ import numpy as np
 RHO_CONSTS = ['real', 'positive', 'absolute', 'complex']
 
 def projection_er(rho, C_s, rho_const, *args, **kwargs):
-    """ Error reduction algorithm.
-    < Input parameters >
-        rho: density map
-        C_s: constraint region where the deisity is expected to be non-zero.
-        rho_const: type of constraint
-            "real"     : real and positive
-            "positive" : complex with positive real part and positive imaginary part
-            "absolute" : absolute value
-            "complex"  : complex
-    < Output >
-        Constrained density map
+    """projection_er(rho, C_s, rho_const, *args, **kwargs) -> numpy.2darray
+    Error reduction algorithm.
+    
+    Parameters
+    ----------
+    rho       : numpy.2darray
+        density map
+    C_s       : numpy.2darray
+        constraint region where the deisity is expected to be non-zero.
+    rho_const : str
+        type of constraint
+        "real"     : real and positive
+        "positive" : complex with positive real part and positive imaginary part
+        "absolute" : absolute value
+        "complex"  : complex
+    
+    Returns
+    -------
+    Constrained density map (numpy.2darray)
     """
     if rho_const=='real': # real positivity
         return np.real(rho)*(np.real(rho) >= 0)*C_s
@@ -31,20 +39,29 @@ def projection_er(rho, C_s, rho_const, *args, **kwargs):
         return rho*C_s
 
 def projection_hio(rho, C_s, rho_const, rho_before, beta, *args, **kwargs):
-    """
+    """projection_hio(rho, C_s, rho_const, rho_before, beta, *args, **kwargs) -> numpy.2darray
     Hybrid input-output algorithm.
-    < Input parameters >
-        rho: density map
-        C_s: constraint region where the deisity is expected to be non-zero.
-        rho_const: type of constraint
-            "real"     : real and positive
-            "positive" : complex with positive real part and positive imaginary part
-            "absolute" : absolute value
-            "complex"  : complex
-        rho_before: density map at the previous step
-        beta: coefficient of HIO
-    < Output >
-        Constrained density map
+
+    Parameters
+    ----------
+    rho        : numpy.2darray
+        density map
+    C_s        : numpy.2darray
+        constraint region where the deisity is expected to be non-zero.
+    rho_const  : str
+        type of constraint
+        "real"     : real and positive
+        "positive" : complex with positive real part and positive imaginary part
+        "absolute" : absolute value
+        "complex"  : complex
+    rho_before : numpy.2darray
+        density map at the previous step
+    beta       : float
+        coefficient of HIO
+    
+    Returns
+    -------
+    Constrained density map (numpy.2darray)
     """
     if rho_const == 'real': # real positivity
         C_s_0 = (np.real(rho) >= 0)*C_s
@@ -58,19 +75,29 @@ def projection_hio(rho, C_s, rho_const, rho_before, beta, *args, **kwargs):
         return rho*C_s + (rho_before - beta*rho)*(1-C_s)
 
 def projection_hpr(rho, C_s, rho_const, rho_before, beta, *args, **kwargs):
-    """ Hybrid projection-reflection algorithm.
-    < Input parameters >
-        rho: density map
-        C_s: constraint region where the deisity is expected to be non-zero.
-        rho_const: type of constraint
-            "real"     : real and positive
-            "positive" : complex with positive real part and positive imaginary part
-            "absolute" : absolute value
-            "complex"  : complex
-        rho_before: density map at the previous step
-        beta: coefficient of HPR
-    < Output >
-        Constrained density map
+    """projection_hpr(rho, C_s, rho_const, rho_before, beta, *args, **kwargs) -> numpy.2darray
+    Hybrid projection-reflection algorithm.
+    
+    Parameters
+    ----------
+    rho        : numpy.2darray
+        density map
+    C_s        : numpy.2darray
+        constraint region where the deisity is expected to be non-zero.
+    rho_const  : str
+        type of constraint
+        "real"     : real and positive
+        "positive" : complex with positive real part and positive imaginary part
+        "absolute" : absolute value
+        "complex"  : complex
+    rho_before : numpy.2darray
+        density map at the previous step
+    beta       : float
+        coefficient of HIO/HPR
+    
+    Returns
+    -------
+    Constrained density map (numpy.2darray)
     """
     if rho_const == 'real': # real positivity
         C_s_0 = (np.real(rho) >= 0)*(np.real(rho)>= 1./(1+beta)*np.real(rho_before))*C_s
