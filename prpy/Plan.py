@@ -113,7 +113,7 @@ class Plan:
         """get(self) -> numpy.2darray, list
         return rho and R factor
         """
-        return self.rho_i.copy() self.r_factor
+        return self.rho_i.copy(), self.r_factor
 
     def set(self, rho_i=None, r_factor=None, C_s=None):
         """set(self, rho_i=None, r_factor=None, C_s=None) -> None
