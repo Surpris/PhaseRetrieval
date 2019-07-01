@@ -360,6 +360,120 @@ def _calcpr_oss(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwar
 
     plan.set(rho_i, r_factor, C_s)
 
+def _calcpr_dm(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwargs):
+    """_calcpr_dm(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwargs) -> None
+    Difference map algorithm
+    Detail: A. V. Martin et al., Optics Express 20, 16650 (2012)
+
+    Parameters
+    ----------
+    F        : numpy.2darray
+        target modulus
+    C_s      : numpy.2darray
+        support in real space
+    plan     : Plan / list of Plans object (Plan)
+        plan of PR
+    D_s      : numpy.2darray (default : None)
+        mask in reciprocal space
+    rho_0    : numpy.2darray (default : None)
+        initial guess of the density map
+    r_factor : list (default : None)
+        history of R factor
+    args     : options
+    kwargs   : options
+    """
+    # Initialize
+    if rho_0 is None:
+        rho_0 = _init_rho(plan.shape)
+        rho_0 *= np.max(np.abs(ifft2(F)))
+    if r_factor is None:
+        r_factor = []
+    _F = np.abs(fftshift(F))
+    _D_s = D_s
+    if D_s is not None:
+        _D_s = fftshift(D_s)
+
+    rho_i = 1.*rho_0
+    rho_f = np.zeros(F.shape, dtype=np.complex64)
+    beta = plan.kwargs.get('beta')
+    if beta is None or beta <= 0:
+        beta = 0.85
+    gamma_s = plan.kwargs.get("gamma_s")
+    if gamma_s is None or gamma_s > 0:
+        gamma_s = - 1. / beta
+    gamma_m = plan.kwargs.get("gamma_m")
+    if gamma_m is None or gamma_m < 0:
+        gamma_m = 1. / beta
+
+    # Define FFT functions
+    func = FFT_FUNC.get(plan.fft_type)
+    ifunc = IFFT_FUNC.get(plan.fft_type)
+
+    # Check use of mask and validity of the parameters
+    updmask_use = plan.kwargs.get('updmask_use', False)
+    updmask_N = plan.kwargs.get('updmask_N')
+    if updmask_use is None or type(updmask_use) != bool:
+        updmask_use = False
+    elif updmask_N is None or type(updmask_N) != int or updmask_N <= 0:
+        updmask_use = False
+    ratio = plan.kwargs.get('updmask_ratio')
+    if ratio is None or ratio <= 0:
+        ratio = -1
+
+    # The known error function for Liu's process.
+    err = plan.kwargs.get('err')
+    if err is not None and type(err) not in [np.ndarray, list]:
+        raise TypeError('"err" has an invalid type.')
+    intensity = plan.kwargs.get('intensity')
+    if intensity is not None and type(intensity) != bool:
+        raise TypeError('"intensity" must be boolean.')
+
+    # alpha = plan.N
+    # d_alpha = - (plan.N-1./plan.N)/9.
+    # updoss_N = int(plan.N/10)
+    # _qx = np.linspace(-1., 1.-2./plan.shape[0], plan.shape[0])
+    # _qy = np.linspace(-1., 1.-2./plan.shape[1], plan.shape[1])
+    # _qxx, _qyy = np.meshgrid(_qx, _qy)
+    # _qrr = np.sqrt(_qxx**2 + _qyy**2)
+    # del _qxx, _qyy, _qx, _qy
+
+    _num = 0 if plan.kwargs.get('num') is None else plan.kwargs.get('num')
+
+    # Main loop
+    width = 1.5
+    # _W = np.exp(-0.5*(_qrr / alpha)**2)
+    for ii in range(plan.N):
+        rho_f = func(rho_i, plan.x_gpu, plan.xf_gpu, plan.cufft_plan) # rho(n) -> G(n)
+        r_factor.append(_calc_r_factor(rho_f, _F))
+        rho_f = _projection_I(rho_f, _F, plan.f_const, _D_s, err, intensity, **kwargs) # G(n) -> G'(n)
+
+        buff = (1. + gamma_s) * ifunc(rho_f, plan.x_gpu, plan.xf_gpu, plan.cufft_plan)
+        A = _projection_er(buff - gamma_s * rho_i, C_s, plan.rho_const)
+        
+        buff = (1. + gamma_m) * _projection_er(rho_i, C_s, plan.rho_const) - gamma_m * rho_i
+        buff = func(buff, plan.x_gpu, plan.xf_gpu, plan.cufft_plan)
+        buff = _projection_I(buff, _F, plan.f_const, _D_s, err, intensity, **kwargs)
+        B = ifunc(buff, plan.x_gpu, plan.xf_gpu, plan.cufft_plan)
+
+        rho_i = rho_i - beta * (A - B)
+        
+        # rho_i = _projection_hio(ifunc(rho_f, plan.x_gpu, plan.xf_gpu, plan.cufft_plan), C_s, plan.rho_const, rho_i, beta) # G'(n) -> rho(n+1)
+        # buff = func(rho_i, plan.x_gpu, plan.xf_gpu, plan.cufft_plan)
+        # buff = np.real(ifunc(buff, plan.x_gpu, plan.xf_gpu, plan.cufft_plan)) # take real part of density
+        # buff = np.real(ifunc(buff*_W, plan.x_gpu, plan.xf_gpu, plan.cufft_plan)) # take real part of density
+        rho_i = rho_i*C_s + buff*(1-C_s)
+        # if np.mod(ii+1, updoss_N) == 0:
+        #     alpha -= d_alpha
+            # _W = np.exp(-0.5*(_qrr / alpha)**2)
+        if updmask_use:
+            if np.mod(ii+1, updmask_N) == 0 and ratio > 0: # Update the mask
+                width = width-0.03 if width >= 1.5 else 1.5
+                C_s = _updmask(np.abs(rho_i), C_s, plan.rho_filter, width, ratio)
+        if plan.kwargs.get('save') is True:
+            _savefig(np.abs(rho_i), C_s, rho_f, r_factor, plan.pr_mode, ii+_num)
+
+    plan.set(rho_i, r_factor, C_s)
+
 CALC_PR = {"ER": _calcpr_er, "HIO": _calcpr_hio, "HPR": _calcpr_hpr, "OSS": _calcpr_oss}
 
 def _calc(F, C_s, plans, D_s=None, rho_0=None, r_factor=None, **kwargs):
