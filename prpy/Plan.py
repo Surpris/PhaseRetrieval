@@ -6,6 +6,8 @@ import pickle
 import importlib
 
 from .fft_funcs import FFT_TYPES, FOUND_FFTW, FOUND_CUFFT
+if FOUND_CUFFT:
+    from .fft_funcs import gpuarray, cu_fft
 from .filters import FILTER_TYPES
 from .proj_density import RHO_CONSTS
 from .proj_modulus import F_CONSTS

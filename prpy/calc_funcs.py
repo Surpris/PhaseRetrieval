@@ -19,7 +19,7 @@ from matplotlib import cm
 from .filters import FILTERS
 from .fft_funcs import FFT_FUNC, IFFT_FUNC
 from .Plan import Plan
-from .utils import init_rho as _init_rho
+from .utils import init_rho as _init_phase
 from .utils import calc_r_factor as _calc_r_factor
 from .utils import update_mask as _updmask
 from .proj_density import projection_er as _projection_er
@@ -52,11 +52,27 @@ def _calcpr_er(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwarg
 
     # Initialize
     if rho_0 is None:
-        rho_0 = _init_rho(plan.shape)
+        rho_0 = _init_phase(plan.shape)
         rho_0 *= np.max(np.abs(ifft2(F)))
+    elif rho_0 == "phase":
+        rho_0 = _init_phase(plan.shape)
+        rho_0 *= np.max(np.abs(ifft2(F)))
+    elif rho_0 == "amplitude":
+        rho_0 = _init_phase(plan.shape)
+        rho_0 = ifft2(F * rho_0)
+    elif rho_0 == "auto":
+        rho_0 = ifft2(F**2)
+    elif rho_0 == "auto, amplitude":
+        rho_0 = _init_phase(plan.shape)
+        rho_0 = ifft2(F**2 * rho_0)
+    elif rho_0 == "auto, phase":
+        rho_0 = _init_phase(plan.shape)
+        rho_0 = rho_0 * ifft2(F**2)
+        
     if r_factor is None:
         r_factor = []
     _F = np.abs(fftshift(F))
+    
     _D_s = D_s
     if D_s is not None:
         _D_s = fftshift(D_s)
@@ -75,9 +91,17 @@ def _calcpr_er(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwarg
         updmask_use = False
     elif updmask_N is None or type(updmask_N) != int or updmask_N <= 0:
         updmask_use = False
+
     ratio = plan.kwargs.get('updmask_ratio')
     if ratio is None or ratio <= 0:
         ratio = -1
+    
+    _init_C_s = kwargs.get("init_C_s", None)
+    width = 1.5
+    if C_s is None:
+        C_s = _updmask(np.abs(rho_i), C_s, plan.rho_filter, width, ratio)
+    if _init_C_s is not None and _init_C_s == True:
+        C_s = _updmask(np.abs(rho_i), C_s, plan.rho_filter, width, ratio)
 
     # The known error function for Liu's process.
     err = plan.kwargs.get('err')
@@ -90,7 +114,6 @@ def _calcpr_er(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwarg
     _num = 0 if plan.kwargs.get('num') is None else plan.kwargs.get('num')
 
     # Main loop
-    width = 1.5
     for ii in range(plan.N):
         rho_f = func(rho_i, plan.x_gpu, plan.xf_gpu, plan.cufft_plan) # rho(n) -> G(n)
         r_factor.append(_calc_r_factor(rho_f, _F))
@@ -130,11 +153,27 @@ def _calcpr_hio(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwar
 
     # Initialize
     if rho_0 is None:
-        rho_0 = _init_rho(plan.shape)
+        rho_0 = _init_phase(plan.shape)
         rho_0 *= np.max(np.abs(ifft2(F)))
+    elif rho_0 == "phase":
+        rho_0 = _init_phase(plan.shape)
+        rho_0 *= np.max(np.abs(ifft2(F)))
+    elif rho_0 == "amplitude":
+        rho_0 = _init_phase(plan.shape)
+        rho_0 = ifft2(F*rho_0)
+    elif rho_0 == "auto":
+        rho_0 = ifft2(F**2)
+    elif rho_0 == "auto, amplitude":
+        rho_0 = _init_phase(plan.shape)
+        rho_0 = ifft2(F**2 * rho_0)
+    elif rho_0 == "auto, phase":
+        rho_0 = _init_phase(plan.shape)
+        rho_0 = rho_0 * ifft2(F**2)
+        
     if r_factor is None:
         r_factor = []
     _F = np.abs(fftshift(F))
+
     _D_s = D_s
     if D_s is not None:
         _D_s = fftshift(D_s)
@@ -156,9 +195,17 @@ def _calcpr_hio(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwar
         updmask_use = False
     elif updmask_N is None or type(updmask_N) != int or updmask_N <= 0:
         updmask_use = False
+
     ratio = plan.kwargs.get('updmask_ratio')
     if ratio is None or ratio <= 0:
         ratio = -1
+    
+    _init_C_s = kwargs.get("init_C_s", None)
+    width = 1.5
+    if C_s is None:
+        C_s = _updmask(np.abs(rho_i), C_s, plan.rho_filter, width, ratio)
+    if _init_C_s is not None and _init_C_s == True:
+        C_s = _updmask(np.abs(rho_i), C_s, plan.rho_filter, width, ratio)
 
     # The known error function for Liu's process.
     err = plan.kwargs.get('err')
@@ -209,11 +256,27 @@ def _calcpr_hpr(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwar
     """
     # Initialize
     if rho_0 is None:
-        rho_0 = _init_rho(plan.shape)
+        rho_0 = _init_phase(plan.shape)
         rho_0 *= np.max(np.abs(ifft2(F)))
+    elif rho_0 == "phase":
+        rho_0 = _init_phase(plan.shape)
+        rho_0 *= np.max(np.abs(ifft2(F)))
+    elif rho_0 == "amplitude":
+        rho_0 = _init_phase(plan.shape)
+        rho_0 = ifft2(F*rho_0)
+    elif rho_0 == "auto":
+        rho_0 = ifft2(F**2)
+    elif rho_0 == "auto, amplitude":
+        rho_0 = _init_phase(plan.shape)
+        rho_0 = ifft2(F**2 * rho_0)
+    elif rho_0 == "auto, phase":
+        rho_0 = _init_phase(plan.shape)
+        rho_0 = rho_0 * ifft2(F**2)
+
     if r_factor is None:
         r_factor = []
     _F = np.abs(fftshift(F))
+
     _D_s = D_s
     if D_s is not None:
         _D_s = fftshift(D_s)
@@ -235,9 +298,17 @@ def _calcpr_hpr(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwar
         updmask_use = False
     elif updmask_N is None or type(updmask_N) != int or updmask_N <= 0:
         updmask_use = False
+    
     ratio = plan.kwargs.get('updmask_ratio')
     if ratio is None or ratio <= 0:
         ratio = -1
+    
+    _init_C_s = kwargs.get("init_C_s", None)
+    width = 1.5
+    if C_s is None:
+        C_s = _updmask(np.abs(rho_i), C_s, plan.rho_filter, width, ratio)
+    if _init_C_s is not None and _init_C_s == True:
+        C_s = _updmask(np.abs(rho_i), C_s, plan.rho_filter, width, ratio)
 
     # The known error function for Liu's process.
     err = plan.kwargs.get('err')
@@ -288,11 +359,27 @@ def _calcpr_oss(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwar
     """
     # Initialize
     if rho_0 is None:
-        rho_0 = _init_rho(plan.shape)
+        rho_0 = _init_phase(plan.shape)
         rho_0 *= np.max(np.abs(ifft2(F)))
+    elif rho_0 == "phase":
+        rho_0 = _init_phase(plan.shape)
+        rho_0 *= np.max(np.abs(ifft2(F)))
+    elif rho_0 == "amplitude":
+        rho_0 = _init_phase(plan.shape)
+        rho_0 = ifft2(F*rho_0)
+    elif rho_0 == "auto":
+        rho_0 = ifft2(F**2)
+    elif rho_0 == "auto, amplitude":
+        rho_0 = _init_phase(plan.shape)
+        rho_0 = ifft2(F**2 * rho_0)
+    elif rho_0 == "auto, phase":
+        rho_0 = _init_phase(plan.shape)
+        rho_0 = rho_0 * ifft2(F**2)
+
     if r_factor is None:
         r_factor = []
     _F = np.abs(fftshift(F))
+
     _D_s = D_s
     if D_s is not None:
         _D_s = fftshift(D_s)
@@ -314,9 +401,17 @@ def _calcpr_oss(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwar
         updmask_use = False
     elif updmask_N is None or type(updmask_N) != int or updmask_N <= 0:
         updmask_use = False
+
     ratio = plan.kwargs.get('updmask_ratio')
     if ratio is None or ratio <= 0:
         ratio = -1
+    
+    _init_C_s = kwargs.get("init_C_s", None)
+    width = 1.5
+    if C_s is None:
+        C_s = _updmask(np.abs(rho_i), C_s, plan.rho_filter, width, ratio)
+    if _init_C_s is not None and _init_C_s == True:
+        C_s = _updmask(np.abs(rho_i), C_s, plan.rho_filter, width, ratio)
 
     # The known error function for Liu's process.
     err = plan.kwargs.get('err')
@@ -384,11 +479,27 @@ def _calcpr_dm(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwarg
     """
     # Initialize
     if rho_0 is None:
-        rho_0 = _init_rho(plan.shape)
+        rho_0 = _init_phase(plan.shape)
         rho_0 *= np.max(np.abs(ifft2(F)))
+    elif rho_0 == "phase":
+        rho_0 = _init_phase(plan.shape)
+        rho_0 *= np.max(np.abs(ifft2(F)))
+    elif rho_0 == "amplitude":
+        rho_0 = _init_phase(plan.shape)
+        rho_0 = ifft2(F*rho_0)
+    elif rho_0 == "auto":
+        rho_0 = ifft2(F**2)
+    elif rho_0 == "auto, amplitude":
+        rho_0 = _init_phase(plan.shape)
+        rho_0 = ifft2(F**2 * rho_0)
+    elif rho_0 == "auto, phase":
+        rho_0 = _init_phase(plan.shape)
+        rho_0 = rho_0 * ifft2(F**2)
+
     if r_factor is None:
         r_factor = []
     _F = np.abs(fftshift(F))
+
     _D_s = D_s
     if D_s is not None:
         _D_s = fftshift(D_s)
@@ -416,9 +527,17 @@ def _calcpr_dm(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwarg
         updmask_use = False
     elif updmask_N is None or type(updmask_N) != int or updmask_N <= 0:
         updmask_use = False
+    
     ratio = plan.kwargs.get('updmask_ratio')
     if ratio is None or ratio <= 0:
         ratio = -1
+    
+    _init_C_s = kwargs.get("init_C_s", None)
+    width = 1.5
+    if C_s is None:
+        C_s = _updmask(np.abs(rho_i), C_s, plan.rho_filter, width, ratio)
+    if _init_C_s is not None and _init_C_s == True:
+        C_s = _updmask(np.abs(rho_i), C_s, plan.rho_filter, width, ratio)
 
     # The known error function for Liu's process.
     err = plan.kwargs.get('err')
@@ -498,11 +617,27 @@ def _calcpr_raar(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwa
     """
     # Initialize
     if rho_0 is None:
-        rho_0 = _init_rho(plan.shape)
+        rho_0 = _init_phase(plan.shape)
         rho_0 *= np.max(np.abs(ifft2(F)))
+    elif rho_0 == "phase":
+        rho_0 = _init_phase(plan.shape)
+        rho_0 *= np.max(np.abs(ifft2(F)))
+    elif rho_0 == "amplitude":
+        rho_0 = _init_phase(plan.shape)
+        rho_0 = ifft2(F*rho_0)
+    elif rho_0 == "auto":
+        rho_0 = ifft2(F**2)
+    elif rho_0 == "auto, amplitude":
+        rho_0 = _init_phase(plan.shape)
+        rho_0 = ifft2(F**2 * rho_0)
+    elif rho_0 == "auto, phase":
+        rho_0 = _init_phase(plan.shape)
+        rho_0 = rho_0 * ifft2(F**2)
+
     if r_factor is None:
         r_factor = []
     _F = np.abs(fftshift(F))
+
     _D_s = D_s
     if D_s is not None:
         _D_s = fftshift(D_s)
@@ -530,9 +665,17 @@ def _calcpr_raar(F, C_s, plan, D_s=None, rho_0=None, r_factor=None, *args, **kwa
         updmask_use = False
     elif updmask_N is None or type(updmask_N) != int or updmask_N <= 0:
         updmask_use = False
+    
     ratio = plan.kwargs.get('updmask_ratio')
     if ratio is None or ratio <= 0:
         ratio = -1
+    
+    _init_C_s = kwargs.get("init_C_s", None)
+    width = 1.5
+    if C_s is None:
+        C_s = _updmask(np.abs(rho_i), C_s, plan.rho_filter, width, ratio)
+    if _init_C_s is not None and _init_C_s == True:
+        C_s = _updmask(np.abs(rho_i), C_s, plan.rho_filter, width, ratio)
 
     # The known error function for Liu's process.
     err = plan.kwargs.get('err')

@@ -59,10 +59,12 @@ def projection_modulus(G, F, f_const, D_s=None, err=None, intensity=False, **kwa
 
     if D_s is None or f_const=='normal':
         return np.exp(1j*np.angle(G))*buff
-    elif D_s is not None and f_const=='free': # free development
+    elif f_const=='free': # free development
         return G*D_s + np.exp(1j*np.angle(G))*buff*(1-D_s)
-    elif D_s is not None and f_const=='nishino': # modified support proposed by Y. Nishino
+    elif f_const=='nishino': # modified support proposed by Y. Nishino
         return np.exp(1j*np.angle(G))*buff
-    elif D_s is not None and f_const == "F(qr)": # F(qr) support
+    elif f_const == "F(qr)": # F(qr) support
         F_qr = fftshift(kwargs.get("F(qr)"))
         return F_qr*D_s + np.exp(1j*np.angle(G))*buff*(1-D_s)
+    elif f_const == "Poisson": # Poisson-type (I/|F|) support proposed by A. Niozu
+        return G*D_s + np.exp(1j*np.angle(G))*np.abs(F)**2/buff*(1-D_s)
